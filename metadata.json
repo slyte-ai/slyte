@@ -1,0 +1,6 @@
+{
+  "name": "Slyte",
+  "description": "A premium social media web app optimized for long-form mobile video performance and interactive content.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
