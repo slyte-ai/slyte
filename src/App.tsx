@@ -117,7 +117,7 @@ export default function App() {
   const [isPremiumStoreOpen, setIsPremiumStoreOpen] = useState(false);
   const [selectedGlowColor, setSelectedGlowColor] = useState<string>('#800000');
 
-  // Instagram-style Settings overlay states
+  // Slyte-style Settings overlay states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsSearchQuery, setSettingsSearchQuery] = useState('');
   const [isAccountPrivate, setIsAccountPrivate] = useState(() => {
@@ -629,7 +629,7 @@ export default function App() {
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-[#0066FF] to-cyan-500 opacity-5 blur-xl group-hover:opacity-15 transition-opacity" />
             
             <div className="flex items-center gap-2 mb-3">
-              <h1 className="text-3xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-cyan-300 to-[#0066FF] bg-clip-text text-transparent">slyte</h1>
+              <h1 className="text-3xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-cyan-300 to-[#0066FF] bg-clip-text text-transparent">Slyte</h1>
               <div className="ml-auto w-2 h-2 rounded-full bg-[#0066FF] animate-ping" />
             </div>
 
@@ -707,7 +707,7 @@ export default function App() {
             <span className="font-bold">13:34</span>
             <div className="w-16 h-4 bg-[#111] rounded-full border border-slate-900 flex items-center justify-center text-[8px] font-bold text-sky-400 tracking-widest gap-1">
               <div className="w-1.5 h-1.5 rounded-full bg-[#0066FF] animate-pulse" />
-              SLYTE
+              Slyte
             </div>
             <div className="flex items-center gap-1 text-[10px]">
               <Zap size={10} className="text-[#0066FF]" />
@@ -718,10 +718,10 @@ export default function App() {
           {/* APPLICATION MAIN ROUTER CONTAINER */}
           {!isLoggedIn ? (
             
-            /* VIEW A: INSTAGRAM STYLE PREMIUM LOGIN GATE */
+            /* VIEW A: SLYTE STYLE PREMIUM LOGIN GATE */
             <div className="flex-1 flex flex-col justify-center px-6 py-8 bg-black overflow-y-auto no-select">
               <div className="text-center mb-8">
-                <h2 className="text-5xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-cyan-300 to-[#0066FF] bg-clip-text text-transparent mb-1">slyte</h2>
+                <h2 className="text-5xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-cyan-300 to-[#0066FF] bg-clip-text text-transparent mb-1">Slyte</h2>
                 <p className="text-[#8E8E8E] text-[11px] uppercase tracking-widest">Architectural Media Node</p>
               </div>
 
@@ -847,7 +847,7 @@ export default function App() {
                     {/* Fixed Feed Top Header banner */}
                     <div className="sticky top-0 bg-black/85 backdrop-blur-md border-b border-slate-920 z-30 px-4 py-3.5 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-neutral-100 to-[#0066FF] bg-clip-text text-transparent">slyte</span>
+                        <span className="text-2xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-neutral-100 to-[#0066FF] bg-clip-text text-transparent">Slyte</span>
                       </div>
 
                       <div className="flex items-center gap-3">
@@ -1996,7 +1996,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 4. INSTAGRAM MENU LIST DATA GROUPS */}
+                  {/* 4. SLYTE MENU LIST DATA GROUPS */}
                   {(() => {
                     interface SettingItem {
                       id: string;

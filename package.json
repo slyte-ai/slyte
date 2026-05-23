@@ -1,5 +1,6 @@
 {
-  "name": "react-example",
+  "name": "slyte",
+  "displayName": "Slyte",
   "private": true,
   "version": "0.0.0",
   "type": "module",
