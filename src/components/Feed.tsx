@@ -6,33 +6,36 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '../supabase';
-import { FeedPost } from '../types';
+import { adjustPostLikes } from '../lib/postActions';
+import type { FeedPost } from '../types';
 import PostCard from './PostCard';
 
 interface FeedProps {
   currentUserId?: string;
+  refreshKey?: number;
 }
 
-export default function Feed({ currentUserId }: FeedProps) {
+const LIKED_KEY = 'slyte_liked_posts';
+
+function loadLikedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LIKED_KEY);
+    return raw ? new Set<string>(JSON.parse(raw) as string[]) : new Set<string>();
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveLikedIds(ids: Set<string>) {
+  localStorage.setItem(LIKED_KEY, JSON.stringify([...ids]));
+}
+
+export default function Feed({ currentUserId, refreshKey = 0 }: FeedProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
-  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
-  const [likingPostId, setLikingPostId] = useState<string | null>(null);
+  const [likedIds, setLikedIds] = useState<Set<string>>(loadLikedIds);
+  const [likingId, setLikingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const loadLikedPosts = useCallback(async (userId: string) => {
-    const { data, error: likesError } = await supabase
-      .from('likes')
-      .select('post_id')
-      .eq('user_id', userId);
-
-    if (likesError) {
-      console.error('[Feed] Failed to load likes:', likesError.message);
-      return;
-    }
-
-    setLikedPostIds(new Set((data ?? []).map((row) => row.post_id)));
-  }, []);
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
@@ -49,87 +52,56 @@ export default function Feed({ currentUserId }: FeedProps) {
     } else {
       setPosts((data ?? []) as FeedPost[]);
     }
-
-    if (currentUserId) {
-      await loadLikedPosts(currentUserId);
-    } else {
-      setLikedPostIds(new Set());
-    }
-
     setLoading(false);
-  }, [currentUserId, loadLikedPosts]);
+  }, []);
 
   useEffect(() => {
     loadFeed();
-  }, [loadFeed]);
+  }, [loadFeed, refreshKey]);
 
   const handleLike = async (postId: string) => {
-    if (!currentUserId || likingPostId) return;
+    if (!currentUserId || likingId) return;
 
-    const alreadyLiked = likedPostIds.has(postId);
-    setLikingPostId(postId);
+    const alreadyLiked = likedIds.has(postId);
+    setLikingId(postId);
 
-    if (alreadyLiked) {
-      const { error: unlikeError } = await supabase
-        .from('likes')
-        .delete()
-        .eq('user_id', currentUserId)
-        .eq('post_id', postId);
-
-      if (!unlikeError) {
-        setLikedPostIds((prev) => {
-          const next = new Set(prev);
-          next.delete(postId);
-          return next;
-        });
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, likes_count: Math.max(0, p.likes_count - 1) }
-              : p
-          )
-        );
-      } else {
-        console.error('[Feed] Unlike failed:', unlikeError.message);
-      }
-    } else {
-      const { error: likeError } = await supabase.from('likes').insert({
-        user_id: currentUserId,
-        post_id: postId,
+    try {
+      const newCount = await adjustPostLikes(postId, alreadyLiked ? -1 : 1);
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes_count: newCount } : p))
+      );
+      setLikedIds((prev) => {
+        const next = new Set<string>(prev);
+        if (alreadyLiked) next.delete(postId);
+        else next.add(postId);
+        saveLikedIds(next);
+        return next;
       });
-
-      if (!likeError) {
-        setLikedPostIds((prev) => new Set(prev).add(postId));
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId ? { ...p, likes_count: p.likes_count + 1 } : p
-          )
-        );
-      } else {
-        console.error('[Feed] Like failed:', likeError.message);
-      }
+    } catch (err) {
+      console.error('[Feed] Like failed:', err);
+      setError(err instanceof Error ? err.message : 'Like failed');
+    } finally {
+      setLikingId(null);
     }
-
-    setLikingPostId(null);
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-neutral-400">
-        <Loader2 className="h-8 w-8 animate-spin text-[#0066FF]" />
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-neutral-500">
+        <Loader2 className="h-8 w-8 animate-spin" />
         <p className="text-sm">Loading feed…</p>
       </div>
     );
   }
 
-  if (error) {
+  if (error && posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <p className="text-sm text-rose-400">Could not load feed: {error}</p>
+      <div className="flex flex-col items-center gap-3 px-6 py-20 text-center">
+        <p className="text-sm text-red-400">{error}</p>
         <button
           type="button"
           onClick={loadFeed}
-          className="flex items-center gap-2 rounded-full border border-neutral-800 px-4 py-2 text-xs font-semibold text-white hover:border-[#0066FF]"
+          className="flex items-center gap-2 text-sm text-[#0095f6]"
         >
           <RefreshCw size={14} />
           Retry
@@ -140,23 +112,24 @@ export default function Feed({ currentUserId }: FeedProps) {
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-neutral-500">
-        <p className="text-sm font-medium text-neutral-400">No posts yet</p>
-        <p className="max-w-xs text-xs leading-relaxed">
-          Posts from your Supabase feed will appear here once added to the database.
-        </p>
+      <div className="py-20 text-center text-sm text-neutral-500">
+        No posts yet. Tap + to share your first photo or video.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="mx-auto w-full max-w-[470px]">
+      {error && (
+        <p className="bg-red-950/40 px-4 py-2 text-center text-xs text-red-400">{error}</p>
+      )}
       {posts.map((post) => (
         <PostCard
           key={post.id}
           post={post}
-          isLiked={likedPostIds.has(post.id)}
-          isLiking={likingPostId === post.id}
+          currentUserId={currentUserId}
+          isLiked={likedIds.has(post.id)}
+          isLiking={likingId === post.id}
           onLike={handleLike}
         />
       ))}

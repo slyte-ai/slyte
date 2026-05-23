@@ -11,9 +11,6 @@ interface SignUpProps {
   onNavigateToSignIn: () => void;
 }
 
-const DEFAULT_AVATAR =
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200';
-
 export default function SignUp({ onNavigateToSignIn }: SignUpProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,7 +45,7 @@ export default function SignUp({ onNavigateToSignIn }: SignUpProps) {
         data: {
           username: cleanUsername,
           full_name: fullName.trim() || cleanUsername,
-          avatar_url: DEFAULT_AVATAR,
+          profile_picture_url: null,
         },
       },
     });
