@@ -13,14 +13,16 @@ export function isAcceptedMediaFile(file: File): boolean {
   return /\.(jpe?g|png|mp4|mov)$/i.test(lower) || file.type.startsWith('image/') || file.type.startsWith('video/');
 }
 
-export function detectTypeFromFileName(fileName: string): PostType | null {
-  const lower = fileName.toLowerCase();
-  if (/\.(jpe?g|png)$/.test(lower)) return 'photo';
-  if (/\.(mp4|mov)$/.test(lower)) return null;
-  return null;
+export async function detectPostType(file: File): Promise<PostType> {
+  if (file.type.startsWith('image/') || /\.(jpe?g|png)$/i.test(file.name)) {
+    return 'photo';
+  }
+
+  const duration = await getVideoDurationSeconds(file);
+  return duration > 0 && duration <= SHORT_MAX_DURATION_SEC ? 'short' : 'video';
 }
 
-export function getVideoDurationSeconds(file: File): Promise<number> {
+function getVideoDurationSeconds(file: File): Promise<number> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
@@ -35,23 +37,6 @@ export function getVideoDurationSeconds(file: File): Promise<number> {
     };
     video.src = url;
   });
-}
-
-export async function detectPostType(file: File): Promise<PostType> {
-  const byName = detectTypeFromFileName(file.name);
-  if (byName === 'photo') return 'photo';
-
-  if (/\.(mp4|mov)$/i.test(file.name) || file.type.startsWith('video/')) {
-    try {
-      const duration = await getVideoDurationSeconds(file);
-      return duration > 0 && duration <= SHORT_MAX_DURATION_SEC ? 'short' : 'video';
-    } catch {
-      return 'video';
-    }
-  }
-
-  if (file.type.startsWith('image/')) return 'photo';
-  throw new Error('Unsupported file type');
 }
 
 export async function publishPost(params: {

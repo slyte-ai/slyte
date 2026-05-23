@@ -5,15 +5,8 @@
 
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { mapProfileRow } from './supabaseMappers';
 import type { Profile } from '../types';
-
-type DbProfileRow = {
-  id: string;
-  username: string;
-  full_name: string | null;
-  profile_picture_url: string | null;
-  bio?: string | null;
-};
 
 export function profileFromAuthUser(user: SupabaseAuthUser): Profile {
   const meta = user.user_metadata ?? {};
@@ -22,23 +15,20 @@ export function profileFromAuthUser(user: SupabaseAuthUser): Profile {
     user.email?.split('@')[0] ||
     'user';
 
+  const picture =
+    (typeof meta.profile_picture_url === 'string' && meta.profile_picture_url) ||
+    (typeof meta.avatar_url === 'string' && meta.avatar_url) ||
+    '';
+
   return {
     id: user.id,
     username,
     full_name: (typeof meta.full_name === 'string' && meta.full_name) || username,
-    profile_picture_url:
-      (typeof meta.profile_picture_url === 'string' && meta.profile_picture_url) || null,
+    avatar_url: picture,
+    profile_picture_url: picture || null,
     bio: (typeof meta.bio === 'string' && meta.bio) || '',
-  };
-}
-
-export function profileFromDbRow(row: DbProfileRow): Profile {
-  return {
-    id: row.id,
-    username: row.username,
-    full_name: row.full_name,
-    profile_picture_url: row.profile_picture_url,
-    bio: row.bio ?? '',
+    followers_count: 0,
+    following_count: 0,
   };
 }
 
@@ -54,10 +44,19 @@ export async function fetchProfileForUser(userId: string): Promise<Profile | nul
     return null;
   }
 
-  if (data) return profileFromDbRow(data as DbProfileRow);
+  if (data) {
+    return mapProfileRow({
+      ...data,
+      full_name: data.full_name ?? null,
+      profile_picture_url: data.profile_picture_url ?? null,
+      bio: data.bio ?? null,
+    });
+  }
 
   const { data: authData } = await supabase.auth.getUser();
-  if (authData.user?.id === userId) return profileFromAuthUser(authData.user);
+  if (authData.user?.id === userId) {
+    return profileFromAuthUser(authData.user);
+  }
 
   return null;
 }
