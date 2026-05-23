@@ -15,6 +15,20 @@ export interface Profile {
   premium_glow_color?: 'blue' | 'violet' | 'orange' | 'emerald' | null;
 }
 
+/** Row shape from the Supabase `feed_posts` view */
+export interface FeedPost {
+  id: string;
+  user_id: string;
+  image_url: string;
+  caption: string;
+  location: string | null;
+  likes_count: number;
+  created_at: string;
+  username: string;
+  avatar_url: string;
+  full_name: string | null;
+}
+
 export interface Post {
   id: string;
   user_id: string;

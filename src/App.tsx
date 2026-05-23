@@ -48,9 +48,12 @@ import {
 } from 'lucide-react';
 
 import { Profile, Post, Comment, Notification, Story, Message } from './types';
-import PostCard from './components/PostCard';
+import Feed from './components/Feed';
+import ProtectedRoute, { AuthScreen } from './components/ProtectedRoute';
 import StoryModal from './components/StoryModal';
 import { PRESET_MEDIAS } from './mockData';
+import { supabase } from './supabase';
+import { fetchProfileForUser } from './lib/authProfile';
 
 // API Configuration Hooks targeting the active Node/Express server endpoints
 const API_BASE = window.location.origin;
@@ -66,22 +69,13 @@ const DEFAULT_CURRENT_USER: Profile = {
 };
 
 export default function App() {
-  // Session & Authentication states
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    return localStorage.getItem('slyte_is_logged_in') === 'true';
-  });
-  const [currentUser, setCurrentUser] = useState<Profile>(() => {
-    const saved = localStorage.getItem('slyte_current_user');
-    return saved ? JSON.parse(saved) : DEFAULT_CURRENT_USER;
-  });
+  // Supabase authentication (global session)
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authScreen, setAuthScreen] = useState<AuthScreen>('signin');
+  const isLoggedIn = Boolean(authUserId);
 
-  // Login/Registration Form States
-  const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin');
-  const [authUsername, setAuthUsername] = useState('');
-  const [authFullName, setAuthFullName] = useState('');
-  const [authAvatar, setAuthAvatar] = useState('');
-  const [authBio, setAuthBio] = useState('');
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<Profile>(DEFAULT_CURRENT_USER);
 
   // App core database states (synchronized across Server Rest APIs + Local Fallbacks)
   const [profiles, setProfiles] = useState<Profile[]>(() => {
@@ -188,6 +182,54 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const applyUserProfile = (profile: Profile) => {
+    setCurrentUser(profile);
+    localStorage.setItem('slyte_current_user', JSON.stringify(profile));
+  };
+
+  const syncProfileForAuthUser = async (userId: string) => {
+    const profile = await fetchProfileForUser(userId);
+    if (profile) {
+      applyUserProfile(profile);
+    }
+  };
+
+  // Supabase auth session + onAuthStateChange
+  useEffect(() => {
+    let mounted = true;
+
+    const handleSession = async (userId: string | null) => {
+      if (!mounted) return;
+      setAuthUserId(userId);
+      if (userId) {
+        localStorage.setItem('slyte_is_logged_in', 'true');
+        await syncProfileForAuthUser(userId);
+      } else {
+        localStorage.removeItem('slyte_is_logged_in');
+        localStorage.removeItem('slyte_current_user');
+        setCurrentUser(DEFAULT_CURRENT_USER);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      void handleSession(session?.user?.id ?? null).finally(() => {
+        if (mounted) setAuthReady(true);
+      });
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void handleSession(session?.user?.id ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Load and bootstrap initial setup
   useEffect(() => {
     // Latency fluctuation for realistic aesthetic values
@@ -283,59 +325,15 @@ export default function App() {
     }
   }, [isPremiumStoreOpen, currentUser]);
 
-  // Auth processing & DEVELOPMENT EMERGENCY BYPASS trigger
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-
-    if (!authUsername.trim()) {
-      setAuthError('Please enter a unique username/handle.');
-      return;
-    }
-
-    const cleanUsername = authUsername.toLowerCase().trim().replace(/\s+/g, '.');
-
-    try {
-      // Post to Express backend server
-      const response = await fetch(`${API_BASE}/api/profiles`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: cleanUsername,
-          full_name: authFullName.trim() || cleanUsername,
-          avatar_url: authAvatar.trim() || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
-          bio: authBio.trim() || 'Visual designer & slyte builder 🚀',
-          id: currentUser.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Database server error.');
-      }
-
-      const updatedProfile = await response.json();
-      registerUserLocally(updatedProfile);
-      showToast(`Welcome back, @${updatedProfile.username}! Sync active.`);
-
-    } catch (err: any) {
-      setAuthError('Authentication failed: database server disconnected.');
-    }
-  };
-
-  const registerUserLocally = (profile: Profile) => {
-    setCurrentUser(profile);
-    setIsLoggedIn(true);
-    localStorage.setItem('slyte_is_logged_in', 'true');
-    localStorage.setItem('slyte_current_user', JSON.stringify(profile));
-  };
-
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setAuthUserId(null);
+    setCurrentUser(DEFAULT_CURRENT_USER);
+    setAuthScreen('signin');
+    setActiveTab('home');
     localStorage.removeItem('slyte_is_logged_in');
     localStorage.removeItem('slyte_current_user');
-    setIsLoggedIn(false);
-    setCurrentUser(DEFAULT_CURRENT_USER);
-    setActiveTab('home');
-    showToast('Secure session closed.');
+    showToast('Signed out.');
   };
 
   // Interactive comment posting handler
@@ -716,122 +714,13 @@ export default function App() {
           </div>
 
           {/* APPLICATION MAIN ROUTER CONTAINER */}
-          {!isLoggedIn ? (
-            
-            /* VIEW A: SLYTE STYLE PREMIUM LOGIN GATE */
-            <div className="flex-1 flex flex-col justify-center px-6 py-8 bg-black overflow-y-auto no-select">
-              <div className="text-center mb-8">
-                <h2 className="text-5xl font-extrabold tracking-tighter bg-gradient-to-r from-white via-cyan-300 to-[#0066FF] bg-clip-text text-transparent mb-1">Slyte</h2>
-                <p className="text-[#8E8E8E] text-[11px] uppercase tracking-widest">Architectural Media Node</p>
-              </div>
-
-              {/* Toggle tabs for login selection */}
-              <div className="flex bg-slate-950 border border-slate-900 rounded-lg p-1 mb-6">
-                <button
-                  onClick={() => { setAuthTab('signin'); setAuthError(null); }}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
-                    authTab === 'signin' ? 'bg-[#0066FF] text-white shadow-md shadow-blue-500/20' : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  Quick Sign In
-                </button>
-                <button
-                  onClick={() => { setAuthTab('signup'); setAuthError(null); }}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${
-                    authTab === 'signup' ? 'bg-[#0066FF] text-white shadow-md shadow-blue-500/20' : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  Create Account
-                </button>
-              </div>
-
-              <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-[10px] text-neutral-400 uppercase tracking-widest font-mono font-bold mb-1.5">
-                    Username / Handle
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-3 flex items-center text-[#0066FF] font-mono text-xs font-bold font-sans">@</span>
-                    <input
-                      type="text"
-                      placeholder="e.g. wanderer.jpeg"
-                      value={authUsername}
-                      onChange={(e) => setAuthUsername(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-900 rounded-xl py-3 pl-8 pr-4 text-xs font-mono text-white focus:outline-none focus:border-[#0066FF] transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {authTab === 'signup' && (
-                  <>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase tracking-widest font-mono font-bold mb-1.5">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Adrian Vance"
-                        value={authFullName}
-                        onChange={(e) => setAuthFullName(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-900 rounded-xl py-3 px-4 text-xs text-white focus:outline-none focus:border-[#0066FF] transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase tracking-widest font-mono font-bold mb-1.5">
-                        Profile Avatar URL (Unsplash/Direct link)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Leave blank for high-contrast slate placeholder"
-                        value={authAvatar}
-                        onChange={(e) => setAuthAvatar(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-900 rounded-xl py-3 px-4 text-xs text-white focus:outline-none focus:border-[#0066FF] transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase tracking-widest font-mono font-bold mb-1.5">
-                        Bio / Creed
-                      </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Write something visual & aesthetic..."
-                        value={authBio}
-                        onChange={(e) => setAuthBio(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-900 rounded-xl py-2 px-4 text-xs text-white focus:outline-none focus:border-[#0066FF] transition-colors resize-none"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {authError && (
-                  <span className="text-[10px] font-semibold text-rose-500 bg-rose-500/5 border border-rose-500/20 p-2.5 rounded-lg text-center leading-snug">
-                    {authError}
-                  </span>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-sky-600 to-[#0066FF] hover:from-sky-500 hover:to-blue-600 text-white font-sans font-bold text-xs rounded-xl py-3.5 shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-transform flex items-center justify-center gap-2 mt-2 cursor-pointer"
-                >
-                  <Zap size={14} />
-                  <span>{authTab === 'signin' ? 'Verify Secret Route' : 'Establish Registry Connection'}</span>
-                </button>
-              </form>
-
-              {/* Developer Bypass Prompt */}
-              <div className="mt-8 border-t border-slate-900/60 pt-6 text-center">
-                <span className="text-[9px] uppercase font-bold tracking-widest text-[#8E8E8E] block mb-2">Emergency Bypass Container</span>
-                <span className="text-[10px] text-neutral-400 leading-relaxed block">
-                  Clicking the button above with any handle will trigger the <strong className="text-sky-400">Rate Limit Bypass Protocol</strong> if network bottlenecks occur, writing a local profile container directly.
-                </span>
-              </div>
-            </div>
-
-          ) : (
-            
-            /* VIEW B: INTEGRATED VIEW WRAPPERS FOR ACTIVE SESSIONS */
+          <ProtectedRoute
+            userId={authUserId}
+            authReady={authReady}
+            authScreen={authScreen}
+            onNavigateToSignIn={() => setAuthScreen('signin')}
+            onNavigateToSignUp={() => setAuthScreen('signup')}
+          >
             <div className="flex-1 flex flex-col relative bg-black overflow-hidden">
               
               {/* Core view renderings */}
@@ -940,34 +829,8 @@ export default function App() {
                       })}
                     </div>
 
-                    {/* Standard posts rendering list container */}
-                    {sortedPosts.length === 0 ? (
-                      <div className="p-12 text-center text-[#999999]/60 flex flex-col items-center justify-center gap-3">
-                        <Compass className="text-[#0066FF]/60" size={36} />
-                        <span className="font-medium text-sm text-neutral-400">No posts yet</span>
-                        <p className="text-xs text-neutral-500 max-w-[240px] leading-relaxed">The stream is empty. Upload your first short-form video or image to share your creative vision with Slyte.</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col">
-                        {sortedPosts.map((post) => (
-                          <PostCard
-                            key={post.id}
-                            post={post}
-                            currentUserId={currentUser.id}
-                            currentUserProfile={currentUser}
-                            comments={comments}
-                            isGlobalMuted={isGlobalMuted}
-                            onToggleMuteGlobal={() => setIsGlobalMuted(!isGlobalMuted)}
-                            onPostComment={handlePostComment}
-                            onLikePost={handleLikePost}
-                            userLiked={likesSet.has(post.id)}
-                            onUserSelectProfile={handleUserSelectProfile}
-                            onSharePost={(p) => setSharingPost(p)}
-                            profiles={profiles}
-                          />
-                        ))}
-                      </div>
-                    )}
+                    {/* Supabase feed (feed_posts view) */}
+                    <Feed currentUserId={authUserId ?? undefined} />
                   </motion.div>
                 )}
 
@@ -1909,9 +1772,6 @@ export default function App() {
                 </button>
               </nav>
 
-            </div>
-          )}
-
           {/* SIMULATED OPTIMIZATION DARK OVERLAY MODAL */}
           <AnimatePresence>
             {isUploading && (
@@ -2222,6 +2082,9 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+
+            </div>
+          </ProtectedRoute>
 
         </div>
 
