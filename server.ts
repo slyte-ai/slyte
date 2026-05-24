@@ -3,40 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
-import pg from 'pg';
+import pkg from 'pg';
+import { Profile, Post, Comment, Notification, Message } from './src/types';
 
-const { Client } = pg;
+const { Pool } = pkg;
 
 const connectionString = process.env.DATABASE_URL;
 
-function useSsl(connectionUrl: string): boolean {
-  try {
-    const hostname = new URL(connectionUrl).hostname;
-    return hostname !== 'localhost' && hostname !== '127.0.0.1';
-  } catch {
-    return true;
-  }
-}
-
-const client = new Client({
-  connectionString,
-  ssl:
-    connectionString && useSsl(connectionString)
-      ? { rejectUnauthorized: false }
-      : undefined,
+const pool = new Pool({
+  connectionString: connectionString || 'postgresql://localhost:5432/postgres',
+  ssl: process.env.NODE_ENV === 'production' && connectionString ? { rejectUnauthorized: false } : undefined
 });
 
-async function connectDb(): Promise<void> {
-  if (!connectionString) {
-    throw new Error('[SLYTE BACKEND] DATABASE_URL is not set');
-  }
-  await client.connect();
-  console.log('[SLYTE BACKEND] Connected to PostgreSQL');
+// For backward-compatibility with other endpoints in this file
+const client = pool;
+
+if (connectionString) {
+  pool.query('SELECT NOW()')
+    .then(() => {
+      console.log('[SLYTE BACKEND] PostgreSQL connection pool initialized and verified successfully.');
+    })
+    .catch(err => {
+      console.error('[SLYTE BACKEND] PostgreSQL connection pool verification failed:', err);
+    });
+} else {
+  console.warn('[SLYTE BACKEND] WARNING: DATABASE_URL is not set. Database integrations will fail.');
 }
 
 const app = express();
@@ -198,7 +193,7 @@ app.post('/api/profiles', async (req, res) => {
 // GET all posts sorted by created_at DESC with unified Users table joins
 app.get('/api/posts', async (req, res) => {
   try {
-    const result = await client.query(`
+    const result = await pool.query(`
       SELECT 
         p.*,
         u.username,
@@ -555,7 +550,6 @@ app.post('/api/profiles/privacy', (req, res) => {
 
 // Setup Vite Dev server middleware or static directory
 async function startServer() {
-  await connectDb();
   await initDb();
 
   if (process.env.NODE_ENV !== 'production') {
@@ -571,13 +565,10 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT as any, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+const PORT = process.env.PORT || 3000;
+app.listen(PORT as any, '0.0.0.0', () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 }
 
-startServer().catch((err) => {
-  console.error('[SLYTE BACKEND] Failed to start server:', err);
-  process.exit(1);
-});
+startServer();

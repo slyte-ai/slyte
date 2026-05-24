@@ -3,37 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type PostType = 'photo' | 'video' | 'short';
-
 export interface Profile {
   id: string;
   username: string;
   full_name: string;
   avatar_url: string;
-  profile_picture_url?: string | null;
   bio: string;
   followers_count: number;
   following_count: number;
   is_premium?: boolean;
   premium_glow_color?: 'blue' | 'violet' | 'orange' | 'emerald' | null;
-}
-
-/** Row shape from the Supabase `feed_posts` view (with legacy aliases for UI) */
-export interface FeedPost {
-  id: string;
-  user_id: string;
-  content_url: string;
-  image_url: string;
-  caption: string;
-  location: string | null;
-  likes_count: number;
-  created_at: string;
-  type: PostType;
-  media_type: 'image' | 'video' | 'short';
-  username: string;
-  avatar_url: string;
-  profile_picture_url: string | null;
-  full_name: string | null;
 }
 
 export interface Post {
@@ -47,15 +26,23 @@ export interface Post {
   created_at: string;
   likes_count: number;
   duration_seconds: number;
+  // Included fields for convenience in local views:
   username?: string;
   avatar_url?: string;
   is_premium?: boolean;
   premium_glow_color?: string | null;
+  // Video editing fields
   trim_start?: number;
   trim_end?: number;
   filter_type?: 'none' | 'mono' | 'vintage' | 'neon' | 'sepia' | 'cyber';
   bg_music_title?: string;
   bg_music_url?: string;
+}
+
+export interface Like {
+  id: string;
+  user_id: string;
+  post_id: string;
 }
 
 export interface Comment {
@@ -94,9 +81,10 @@ export interface Story {
 
 export interface Message {
   id: string;
-  thread_id: string;
-  sender_id: string;
+  thread_id: string; // The username of the user this conversation is with (or other identifier)
+  sender_id: string; // ID of the sender (either currentUser or the other party)
   sender_username: string;
   text: string;
   created_at: string;
 }
+
